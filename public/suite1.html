@@ -280,6 +280,12 @@
   <audio id="local" autoplay muted></audio>
   <audio id="remote" autoplay></audio>
 
+  <div>
+    <button id="hangupBtn" onclick="endCall()" style="display: none;">Encerrar Chamada</button>
+    <span id="callTimer" style="margin-left: 10px;"></span>
+  </div>
+  
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io()
