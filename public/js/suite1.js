@@ -19,9 +19,7 @@ socket.on("call", async ({ from, offer }) => {
   offerReceived = offer
   callUI.style.display = "block"
   callStatus.textContent = "Chamada recebida"
-  callStatus.style.backgroundColor = "#fef9c3" // Light yellow background
-
-  // Play ringtone
+  callStatus.style.backgroundColor = "#fef9c3"
   playRingtone()
 })
 
@@ -73,13 +71,13 @@ async function acceptCall() {
     socket.emit("signal", { to: "recepcao", data: answer })
 
     callStatus.textContent = "Chamada conectada"
-    callStatus.style.backgroundColor = "#dcfce7" // Light green background
+    callStatus.style.backgroundColor = "#dcfce7"
     callActive = true
     setupAudioAnalyser()
   } catch (error) {
     console.error("Erro ao aceitar chamada:", error)
     callStatus.textContent = "Erro ao conectar"
-    callStatus.style.backgroundColor = "#fee2e2" // Light red background
+    callStatus.style.backgroundColor = "#fee2e2"
   }
 }
 
@@ -88,8 +86,7 @@ function rejectCall() {
   offerReceived = null
   callUI.style.display = "none"
   callStatus.textContent = "Chamada recusada"
-  callStatus.style.backgroundColor = "#fee2e2" // Light red background
-
+  callStatus.style.backgroundColor = "#fee2e2"
   socket.emit("callRejected", { to: "recepcao" })
 
   setTimeout(() => {
@@ -98,7 +95,7 @@ function rejectCall() {
   }, 3000)
 }
 
-// Ringtone functionality
+// Ringtone
 let ringtone
 
 function playRingtone() {
@@ -125,9 +122,7 @@ function setupAudioAnalyser() {
     analyser = audioContext.createAnalyser()
     analyser.fftSize = 256
     source.connect(analyser)
-
     dataArray = new Uint8Array(analyser.frequencyBinCount)
-
     updateVolumeMeter()
   }
 }
@@ -136,16 +131,10 @@ function updateVolumeMeter() {
   if (!callActive || !analyser) return
 
   analyser.getByteFrequencyData(dataArray)
-
-  // Calculate volume level (0-100)
-  let sum = 0
-  for (let i = 0; i < dataArray.length; i++) {
-    sum += dataArray[i]
-  }
+  let sum = dataArray.reduce((acc, val) => acc + val, 0)
   const average = sum / dataArray.length
-  const volumeLevel = Math.min(100, average * 2) // Scale up for better visibility
+  const volumeLevel = Math.min(100, average * 2)
 
-  // Update volume meter
   volumeMeter.style.setProperty("--volume-level", `${volumeLevel}%`)
   volumeMeter.style.background = `linear-gradient(to right, var(--primary-color) ${volumeLevel}%, var(--border-color) ${volumeLevel}%)`
 

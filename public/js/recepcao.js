@@ -7,33 +7,28 @@ const callUI = document.getElementById("callUI")
 const callStatus = document.getElementById("callStatus")
 const volumeMeter = document.getElementById("volumeMeter")
 
-let offerReceived = null
 let callActive = false
 let audioContext
 let analyser
 let dataArray
 
-socket.emit("register", "suite1")
-
-socket.on("call", async ({ from, offer }) => {
-  offerReceived = offer
-  callUI.style.display = "block"
-  callStatus.textContent = "Chamada recebida"
-  callStatus.style.backgroundColor = "#fef9c3" // Light yellow background
-
-  // Play ringtone
-  playRingtone()
-})
+socket.emit("register", "recepcao")
 
 socket.on("signal", async ({ from, data }) => {
   if (data.candidate) {
     await pc.addIceCandidate(new RTCIceCandidate(data))
+  } else if (data.type === "answer") {
+    await pc.setRemoteDescription(new RTCSessionDescription(data))
+    callStatus.textContent = "Chamada conectada"
+    callStatus.style.backgroundColor = "#dcfce7"
+    callActive = true
+    setupAudioAnalyser()
   }
 })
 
 pc.onicecandidate = (event) => {
   if (event.candidate) {
-    socket.emit("signal", { to: "recepcao", data: event.candidate })
+    socket.emit("signal", { to: "suite1", data: event.candidate })
   }
 }
 
@@ -46,7 +41,6 @@ pc.onconnectionstatechange = () => {
     callStatus.textContent = "Chamada finalizada"
     callStatus.style.backgroundColor = ""
     callActive = false
-    callUI.style.display = "none"
     if (audioContext) {
       audioContext.close()
       audioContext = null
@@ -57,64 +51,20 @@ pc.onconnectionstatechange = () => {
   }
 }
 
-async function acceptCall() {
-  stopRingtone()
-  callUI.style.display = "none"
-  callStatus.textContent = "Conectando..."
+async function startCall() {
+  callStatus.textContent = "Chamando suíte..."
+  callStatus.style.backgroundColor = "#fef9c3"
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     localAudio.srcObject = stream
     stream.getTracks().forEach((track) => pc.addTrack(track, stream))
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offerReceived))
-    const answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-    socket.emit("signal", { to: "recepcao", data: answer })
-
-    callStatus.textContent = "Chamada conectada"
-    callStatus.style.backgroundColor = "#dcfce7" // Light green background
-    callActive = true
-    setupAudioAnalyser()
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    socket.emit("call", { to: "suite1", offer })
   } catch (error) {
-    console.error("Erro ao aceitar chamada:", error)
-    callStatus.textContent = "Erro ao conectar"
-    callStatus.style.backgroundColor = "#fee2e2" // Light red background
-  }
-}
-
-function rejectCall() {
-  stopRingtone()
-  offerReceived = null
-  callUI.style.display = "none"
-  callStatus.textContent = "Chamada recusada"
-  callStatus.style.backgroundColor = "#fee2e2" // Light red background
-
-  socket.emit("callRejected", { to: "recepcao" })
-
-  setTimeout(() => {
-    callStatus.textContent = "Aguardando chamadas"
-    callStatus.style.backgroundColor = ""
-  }, 3000)
-}
-
-// Ringtone functionality
-let ringtone
-
-function playRingtone() {
-  if (!ringtone) {
-    ringtone = new Audio()
-    ringtone.src =
-      "data:audio/wav;base64,UklGRigBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQBAADpAFgCwAMlBZEGxQfsCAwKGgssDCYNDA7nDrQPehA2EewRmBI/E+ITeBTxFGEV0BU3FpUW8RZDFzIXBxfeFrAWeBZFFhIW3RWnFXIVOBUEFdEUoBRxFEMUFRT1E9UTuhOiE4wTdxNlE1YTSxM/E0ATRBNKE1MTXxNxE4UTlxOoE7oTzBPcE+sT+RMHFBQUIRQsFDgURRRQFFoUYxRqFHAUdRR5FHsUfBR7FHoUeBR1FHIUbxRrFGcUYxRfFFoUVhRSFE4UShRHFEQUQRQ/FD0UOxQ5FDgUNxQ2FDUUNBQzFDIUMRQwFC8ULhQtFCwUKxQqFCkUKBQnFCYUJRQkFCMUIhQhFCAUHxQeFB0UHBQbFBoUGRQYFBcUFhQVFBQUExQSFBEUEBQPFA4UDRQMFAsUChQJFAgUBxQGFAUUBBQDFAIUARQAFP8T/hP9E/wT+xP6E/kT+BP3E/YT9RP0E/MT8hPxE/AT7xPuE+0T7BPrE+oT6RPo"
-    ringtone.loop = true
-  }
-  ringtone.play().catch((e) => console.log("Erro ao tocar ringtone:", e))
-}
-
-function stopRingtone() {
-  if (ringtone) {
-    ringtone.pause()
-    ringtone.currentTime = 0
+    console.error("Erro ao iniciar chamada:", error)
   }
 }
 
@@ -127,7 +77,6 @@ function setupAudioAnalyser() {
     source.connect(analyser)
 
     dataArray = new Uint8Array(analyser.frequencyBinCount)
-
     updateVolumeMeter()
   }
 }
@@ -136,16 +85,10 @@ function updateVolumeMeter() {
   if (!callActive || !analyser) return
 
   analyser.getByteFrequencyData(dataArray)
-
-  // Calculate volume level (0-100)
-  let sum = 0
-  for (let i = 0; i < dataArray.length; i++) {
-    sum += dataArray[i]
-  }
+  let sum = dataArray.reduce((acc, val) => acc + val, 0)
   const average = sum / dataArray.length
-  const volumeLevel = Math.min(100, average * 2) // Scale up for better visibility
+  const volumeLevel = Math.min(100, average * 2)
 
-  // Update volume meter
   volumeMeter.style.setProperty("--volume-level", `${volumeLevel}%`)
   volumeMeter.style.background = `linear-gradient(to right, var(--primary-color) ${volumeLevel}%, var(--border-color) ${volumeLevel}%)`
 
